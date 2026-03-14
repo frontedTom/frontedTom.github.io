@@ -1,0 +1,29 @@
+{
+  "menu_blog": "文章",
+  "menu_tag": "标签",
+  "menu_album": "相册",
+  "menu_projects": "项目",
+  "menu_music": "音乐",
+  "menu_about": "简历",
+  "desc_projects": "一些有趣的小玩意",
+  "desc_about": "目前可以公开的情报",
+  "desc_album": "我的相册",
+  "home_title": "CodeTom的个人博客",
+  "home_desc": "科技，音乐，以及风景",
+  "label_read_more": "让我瞅瞅",
+  "blog_title": "文章",
+  "btn_prev": "上一页",
+  "btn_next": "下一页",
+  "label_learn_more": "让我瞅瞅",
+
+  "footer": {
+    "desc": "基于Nextjs和Tailwind开发",
+    "view_source": "查看源码"
+  },
+  "oc_title": "自设",
+
+  "Latest": "动态",
+  "All Posts": "所有文章",
+  "img_overlay_hint": "长按拖动, 滚动缩放。",
+  "img_overlay_hint_mobile": "长按拖动, 双指缩放。"
+}

@@ -1,0 +1,711 @@
+---
+title: useRequest
+date: '2025-09-09'
+tags: ['React aHooks']
+draft: true
+summary: useRequest is a React hook used to handle requests
+---
+
+# 目录
+
+- [一、基础用法](#一基础用法)
+  - [默认请求](#默认请求)
+  - [手动触发](#手动触发)
+  - [生命周期](#生命周期)
+  - [刷新（重复上一次请求）](#刷新重复上一次请求)
+  - [立即变更数据](#立即变更数据)
+  - [取消响应](#取消响应)
+  - [参数管理](#参数管理)
+- [二、Loading Delay](#二loading-delay)
+- [三、轮询](#三轮询)
+  - [轮询错误重试](#轮询错误重试)
+- [四、Ready](#四ready)
+- [五、依赖刷新](#五依赖刷新)
+  - [自定义刷新行为](#自定义刷新行为)
+- [六、屏幕聚焦重新请求](#六屏幕聚焦重新请求)
+- [七、防抖](#七防抖)
+- [八、节流](#八节流)
+- [九、缓存&SWR](#九缓存swr)
+- [十、错误重试](#十错误重试)
+
+
+# 一、基础用法
+
+## 默认请求
+
+默认情况下，`useRequest` 第一个参数是一个异步函数，在组件初始化时，会自动执行该异步函数。同时自动管理该异步函数的 `loading` , `data` , `error` 等状态。
+
+```
+const { data, error, loading } = useRequest(service);
+```
+
+## 手动触发
+
+如果设置了 `options.manual = true`，则 `useRequest` 不会默认执行，需要通过 `run` 或者 `runAsync` 来触发执行。
+
+```
+const { loading, run, runAsync } = useRequest(service, {
+  manual: true
+});
+
+<button onClick={run} disabled={loading}>
+  {loading ? 'Loading' : 'Edit'}
+</button>
+```
+
+在实际使用过程中，也可以定义一个变量，类似于下面写法，使代码更清晰
+
+```
+const fetchService = useRequest(service, {
+  manual: true
+});
+
+<button onClick={() => fetchService.run()} disabled={fetchService.loading}>
+  {fetchService.loading ? 'Loading' : 'Edit'}
+</button>
+```
+
+也可以给方法重命名
+
+```
+const { loading:serviceLoading, run:fetchService, runAsync } = useRequest(service, {
+  manual: true
+});
+
+<button onClick={fetchService()} disabled={serviceLoading}>
+  {fetchService.loading ? 'Loading' : 'Edit'}
+</button>
+```
+
+run 与 runAsync 的区别在于：
+
+- run 是一个普通的同步函数，我们会自动捕获异常，你可以通过 options.onError 来处理异常时的行为。
+
+- runAsync 是一个返回 Promise 的异步函数，如果使用 runAsync 来调用，则意味着你需要自己捕获异常。
+
+```
+runAsync().then((data) => {
+  console.log(data);
+}).catch((error) => {
+  console.log(error);
+})
+```
+
+## 生命周期
+
+- `onBefore`：请求之前触发
+- `onSuccess`：请求成功触发
+- `onError`：请求失败触发
+- `onFinally`：请求完成触发
+
+```
+  const { loading, run } = useRequest(editUsername, {
+    manual: true,
+    onBefore: (params) => {
+      message.info(`Start Request: ${params[0]}`);
+    },
+    onSuccess: (result, params) => {
+      setState('');
+      message.success(`The username was changed to "${params[0]}" !`);
+    },
+    onError: (error) => {
+      message.error(error.message);
+    },
+    onFinally: (params, result, error) => {
+      message.info(`Request finish`);
+    },
+  });
+
+```
+
+## 刷新（重复上一次请求）
+
+`useRequest` 提供了 `refresh` 和 `refreshAsync` 方法，使我们可以使用上一次的参数，重新发起请求。
+
+```
+export default () => {
+  const { data, loading, run, refresh } = useRequest((id: number) => getUsername(id), {
+    manual: true,
+  });
+
+  useEffect(() => {
+    run(1);
+  }, []);
+
+  if (loading) {
+    return <div>loading...</div>;
+  }
+  return (
+    <div>
+      <p>Username: {data}</p>
+      <button onClick={refresh} type="button">
+        Refresh
+      </button>
+    </div>
+  );
+```
+
+我们想重新发起上一次的请求，那我们就可以使用 `refresh` 来代替 `run(1)`，这在复杂参数的场景中是非常有用的
+当然 `refresh` 和 `refreshAsync` 的区别和 `run` 和 `runAsync` 是一致的。
+
+## 立即变更数据
+
+`mutate` 的用法与 `React.setState` 一致，支持 `mutate(newData)` 和 `mutate((oldData) => newData)` 两种写法。
+我们修改了用户名，但是我们不希望等编辑接口调用成功之后，才给用户反馈。而是直接修改页面数据，同时在背后去调用修改接口，等修改接口返回之后，另外提供反馈。
+
+```
+export default () => {
+  // store last username
+  const lastRef = useRef<string>();
+
+  const [state, setState] = useState('');
+
+  // get username
+  const { data: username, mutate } = useRequest(getUsername);
+
+  // edit username
+  const { run: edit } = useRequest(editUsername, {
+    manual: true,
+    onSuccess: (result, params) => {
+      setState('');
+      message.success(`The username was changed to "${params[0]}" !`);
+    },
+    onError: (error) => {
+      message.error(error.message);
+      mutate(lastRef.current);
+    },
+  });
+
+  const onChange = () => {
+    lastRef.current = username;
+    mutate(state);
+    edit(state);
+  };
+
+  return (
+    <div>
+      <p>Username: {username}</p>
+      <input
+        onChange={(e) => setState(e.target.value)}
+        value={state}
+        placeholder="Please enter username"
+        style={{ width: 240, marginRight: 16 }}
+      />
+      <button type="button" onClick={onChange}>
+        Edit
+      </button>
+    </div>
+  );
+};
+```
+
+## 取消响应
+
+`useRequest` 提供了 `cancel` 函数，用于忽略当前 `promise` 返回的数据和错误
+
+**注意：调用 `cancel` 函数并不会取消 promise 的执行**
+
+同时 `useRequest` 会在以下时机自动忽略响应：
+
+- 组件卸载时，正在进行的 `promise`
+- 竞态取消，当上一次 `promise` 还没返回时，又发起了下一次 `promise`，则会忽略上一次 `promise` 的响应
+
+```
+export default () => {
+  const [state, setState] = useState('');
+
+  const { loading, run, cancel } = useRequest(editUsername, {
+    manual: true,
+    onSuccess: (result, params) => {
+      setState('');
+      message.success(`The username was changed to "${params[0]}" !`);
+    },
+    onError: (error) => {
+      message.error(error.message);
+    },
+  });
+
+  return (
+    <div>
+      <input
+        onChange={(e) => setState(e.target.value)}
+        value={state}
+        placeholder="Please enter username"
+        style={{ width: 240, marginRight: 16 }}
+      />
+      <button disabled={loading} type="button" onClick={() => run(state)}>
+        {loading ? 'Loading' : 'Edit'}
+      </button>
+      <button type="button" onClick={cancel} style={{ marginLeft: 16 }}>
+        Cancel
+      </button>
+    </div>
+  );
+};
+```
+
+## 参数管理
+
+`useRequest` 返回的 `params` 会记录当次调用 `service` 的参数数组。比如你触发了 `run(1, 2, 3)`，则 `params` 等于 `[1, 2, 3]` 。
+
+如果我们设置了 `options.manual = false`，则首次调用 `service` 的参数可以通过 `options.defaultParams` 来设置。
+
+```
+export default () => {
+  const [state, setState] = useState('');
+
+  // get username
+  const {
+    data: username,
+    run,
+    params,
+  } = useRequest(getUsername, {
+    defaultParams: ['1'],
+  });
+
+  const onChange = () => {
+    run(state);
+  };
+
+  return (
+    <div>
+      <input
+        onChange={(e) => setState(e.target.value)}
+        value={state}
+        placeholder="Please enter userId"
+        style={{ width: 240, marginRight: 16 }}
+      />
+      <button type="button" onClick={onChange}>
+        GetUserName
+      </button>
+      <p style={{ marginTop: 8 }}>UserId: {params[0]}</p>
+      <p>Username: {username}</p>
+    </div>
+  );
+};
+```
+
+## API
+
+```
+const {
+  loading: boolean,
+  data?: TData,
+  error?: Error,
+  params: TParams || [],
+  run: (...params: TParams) => void,
+  runAsync: (...params: TParams) => Promise<TData>,
+  refresh: () => void,
+  refreshAsync: () => Promise<TData>,
+  mutate: (data?: TData | ((oldData?: TData) => (TData | undefined))) => void,
+  cancel: () => void,
+} = useRequest<TData, TParams>(
+  service: (...args: TParams) => Promise<TData>,
+  {
+    manual?: boolean,
+    defaultParams?: TParams,
+    onBefore?: (params: TParams) => void,
+    onSuccess?: (data: TData, params: TParams) => void,
+    onError?: (e: Error, params: TParams) => void,
+    onFinally?: (params: TParams, data?: TData, e?: Error) => void,
+  }
+);
+```
+
+## Result
+
+| 参数         | 说明                                                                                     |
+| ------------ | :--------------------------------------------------------------------------------------- |
+| data         | service 返回的数据                                                                       |
+| error        | service 抛出的异常                                                                       |
+| loading      | service 是否正在执行                                                                     |
+| params       | 当次执行的 service 的参数数组。比如你触发了 `run(1, 2, 3)`，则 `params` 等于 `[1, 2, 3]` |
+| run          | 手动触发 service 执行，参数会传递给 service <br/> 异常自动处理，通过 `onError` 反馈      |
+| runAsync     | 与 `run` 用法一致，但返回的是 `Promise`，需要自行处理异常。                              |
+| refresh      | 使用上一次的 `params`，重新调用 `run`                                                    |
+| refreshAsync | 使用上一次的 `params`，重新调用 `runAsync`                                               |
+| mutate       | 直接修改 `data`                                                                          |
+| cancel       | 忽略当前 `Promise` 的响应                                                                |
+
+## Options
+
+| 参数          | 说明                                                                                                                   |
+| ------------- | :--------------------------------------------------------------------------------------------------------------------- |
+| manual        | 默认 `false`。 即在初始化时自动执行 `service`。 <br/> 如果设置为 `true`，则需要手动调用 `run` 或 `runAsync` 触发执行。 |
+| defaultParams | 首次默认执行时，传递给 service 的参数                                                                                  |
+| onBefore      | service 执行前触发                                                                                                     |
+| onSuccess     | service resolve 时触发                                                                                                 |
+| onError       | service reject 时触发                                                                                                  |
+| onFinally     | service 执行完成时触发                                                                                                 |
+
+---
+
+# 二、Loading Delay
+
+通过设置 `options.loadingDelay` ，可以延迟 `loading` 变成 `true` 的时间，有效防止闪烁。
+
+```
+export default () => {
+  const action = useRequest(getUsername);
+
+  const withLoadingDelayAction = useRequest(getUsername, {
+    loadingDelay: 300,
+  });
+
+  const trigger = () => {
+    action.run();
+    withLoadingDelayAction.run();
+  };
+
+  return (
+    <div>
+      <button type="button" onClick={trigger}>
+        run
+      </button>
+
+      <div style={{ margin: '24px 0', width: 300 }}>
+        Username: {action.loading ? 'Loading...' : action.data}
+      </div>
+      <div>
+        Username: {withLoadingDelayAction.loading ? 'Loading...' : withLoadingDelayAction.data}
+      </div>
+    </div>
+  );
+};
+```
+
+例如上面的场景，假如 `getUsername` 在 300ms 内返回，则 `loading` 不会变成 `true`，避免了页面展示 `Loading...` 的情况。
+
+# 三、轮询
+
+通过设置 `options.pollingInterval`，进入轮询模式，`useRequest` 会定时触发 `service` 执行。
+
+```
+export default () => {
+  const { data, loading, run, cancel } = useRequest(getUsername, {
+    pollingInterval: 1000,
+    pollingWhenHidden: false,
+  });
+
+  return (
+    <>
+      <p>Username: {loading ? 'Loading' : data}</p>
+      <button type="button" onClick={run}>
+        start
+      </button>
+      <button type="button" onClick={cancel} style={{ marginLeft: 16 }}>
+        stop
+      </button>
+    </>
+  );
+};
+```
+
+例如上面的场景，会每隔 3000ms 请求一次 `getUsername`。同时你可以通过 `cancel` 来停止轮询，通过 `run/runAsync` 来启动轮询。
+
+## 轮询错误重试
+
+通过 `options.pollingErrorRetryCount` 轮询错误重试次数。
+
+```
+const { data, run, cancel } = useRequest(getUsername, {
+  pollingInterval: 3000,
+  pollingErrorRetryCount: 3,
+});
+```
+
+## Options
+
+| 参数                   | 说明                                                                                                   |
+| ---------------------- | :----------------------------------------------------------------------------------------------------- |
+| pollingInterval        | 轮询间隔，单位为毫秒。如果值大于 0，则处于轮询模式。                                                   |
+| pollingWhenHidden      | 在页面隐藏时，是否继续轮询。如果设置为 false，在页面隐藏时会暂时停止轮询，页面重新显示时继续上次轮询。 |
+| pollingErrorRetryCount | 轮询错误重试次数。如果设置为 -1，则无限次。                                                            |
+
+## 备注
+
+- `options.pollingInterval`、`options.pollingWhenHidden` 支持动态变化。
+- 如果设置 `options.manual = true`，则初始化不会启动轮询，需要通过 `run/runAsync` 触发开始。
+- 如果设置 `pollingInterval` 由 `0` 变成 大于 `0` 的值，不会启动轮询，需要通过 `run/runAsync` 触发开始。
+- 轮询原理是在每次请求完成后，等待 `pollingInterval` 时间，发起下一次请求。
+
+# 四、Ready
+
+通过设置 `options.ready`，可以控制请求是否发出。当其值为 `false` 时，请求永远都不会发出。
+
+- 当 `manual=false` 自动请求模式时，每次 `ready` 从 `false` 变为 `true` 时，都会自动发起请求，会带上参数 `options.defaultParams`。
+- 当 `manual=true` 手动请求模式时，只要 `ready=false`，则通过 `run/runAsync` 触发的请求都不会执行。
+
+```
+import { useRequest, useToggle } from 'ahooks';
+import Mock from 'mockjs';
+import React from 'react';
+
+function getUsername() {
+  return new Promise((resolve) => {
+    setTimeout(() => {
+      resolve(Mock.mock('@name'));
+    }, 1000);
+  });
+}
+
+export default () => {
+  const [ready, { toggle }] = useToggle(false);
+
+  const { data, loading, run } = useRequest(getUsername, {
+    ready,
+    manual: true,
+  });
+
+  return (
+    <>
+      <p>
+        Ready: {JSON.stringify(ready)}
+        <button onClick={toggle} style={{ marginLeft: 16 }}>
+          Toggle Ready
+        </button>
+      </p>
+      <p>
+        Username: {loading ? 'Loading' : data}
+        <button type="button" onClick={run} style={{ marginLeft: 16 }}>
+          run
+        </button>
+      </p>
+    </>
+  );
+};
+```
+
+# 五、依赖刷新
+
+通过设置 `options.refreshDeps`，在依赖变化时， `useRequest` 会自动调用 `refresh` 方法，实现刷新（重复上一次请求）的效果。
+
+```
+const [userId, setUserId] = useState('1');
+const { data, run } = useRequest(() => getUserSchool(userId), {
+  refreshDeps: [userId],
+});
+
+const [userId, setUserId] = useState('1');
+const { data, refresh } = useRequest(() => getUserSchool(userId));
+useEffect(() => {
+  refresh();
+}, [userId]);
+```
+
+上面两端代码的效果是一样的，但是第一种方式更简洁。
+
+当 `refreshDeps` 所绑定的依赖数组变化时，使用上一次的参数重新发起请求。
+
+## 自定义刷新行为
+
+当依赖数组变化时，首先校验参数合法性，然后发起新的请求
+
+```
+import React, { useState } from 'react';
+import Mock from 'mockjs';
+import isNumber from 'lodash/isNumber';
+import { Button, Space } from 'antd';
+import { useRequest } from 'ahooks';
+
+function getUsername(id: number): Promise<string> {
+  console.log('getUsername id:', id);
+
+  return new Promise((resolve) => {
+    setTimeout(() => {
+      resolve(Mock.mock('@name'));
+    }, 1000);
+  });
+}
+
+export default () => {
+  const [userId, setUserId] = useState<number>();
+  const { data, loading, run } = useRequest((id: number) => getUsername(id), {
+    refreshDeps: [userId],
+    refreshDepsAction: () => {
+      if (!isNumber(userId)) {
+        console.log(
+          `parameter "userId" expected to be a number, but got ${typeof userId}.`,
+          userId,
+        );
+        return;
+      }
+      run(userId);
+    },
+  });
+
+  return (
+    <Space direction="vertical">
+      <p>Username: {loading ? 'loading...' : data}</p>
+      <Button onClick={() => setUserId(Math.random())}>
+        Use latest id to refresh (by `refreshDeps`)
+      </Button>
+      <Button onClick={() => run(Math.random())}>Use latest id to refresh (by `run`)</Button>
+    </Space>
+  );
+};
+```
+
+**备注：如果设置 `options.manual = true` ，则 `refreshDeps`, `refreshDepsAction` 都不再生效，需要通过 `run/runAsync` 手动触发请求。**
+
+# 六、屏幕聚焦重新请求
+
+通过设置 `options.refreshOnWindowFocus`，在浏览器窗口 `refocus` 和 `revisible` 时，会重新发起请求。
+
+点击浏览器外部，再点击当前页面来体验效果（或者隐藏当前页面，重新展示），如果和上一次请求间隔大于 5000ms，则会重新请求一次。
+
+```
+import Mock from 'mockjs';
+import React from 'react';
+import { useRequest } from 'ahooks';
+
+function getUsername() {
+  return new Promise((resolve) => {
+    setTimeout(() => {
+      resolve(Mock.mock('@name'));
+    }, 1000);
+  });
+}
+
+export default () => {
+  const { data, loading } = useRequest(getUsername, {
+    refreshOnWindowFocus: true,
+  });
+
+  return <div>Username: {loading ? 'Loading' : data}</div>;
+};
+```
+
+## Options
+
+| 参数                 | 说明                                           |
+| -------------------- | :--------------------------------------------- |
+| refreshOnWindowFocus | 在屏幕重新获取焦点或重新显示时，重新发起请求。 |
+| focusTimespan        | 重新请求间隔，单位为毫秒。                     |
+
+**备注：**
+
+- `options.refreshOnWindowFocus`、`options.focusTimespan` 支持动态变化。
+- 监听的浏览器事件为 `visibilitychange` 和 `focus`。
+
+# 七、防抖
+
+通过设置 `options.debounceWait`，进入防抖模式，此时如果频繁触发 `run` 或者 `runAsync`，则会以防抖策略进行请求。
+
+```
+const { data, run } = useRequest(getUsername, {
+  debounceWait: 300,
+  manual: true
+});
+```
+
+上示例代码，频繁触发 `run`，只会在最后一次触发结束后等待 300ms 执行。 多用于输入框等需要防抖的场景。
+
+## Options
+
+debounce 所有参数用法和效果同 lodash.debounce
+| 参数 | 说明 |
+|------------------|:--------------------------|
+| debounceWait | 防抖等待时间, 单位为毫秒，设置后，进入防抖模式。 |
+| debounceLeading | 在延迟开始前执行调用。 |
+| debounceTrailing | 在延迟结束后执行调用。 |
+| debounceMaxWait | 允许被延迟的最大值。 |
+
+**备注：**
+
+- `options.debounceWait`、`options.debounceLeading`、`options.debounceTrailing`、`options.debounceMaxWait`支持动态变化。
+- `runAsync` 在真正执行时，会返回 `Promise`。在未被执行时，不会有任何返回。
+- `cancel` 可以中止正在等待执行的函数。
+
+# 八、节流
+
+通过设置 `options.throttleWait`，进入节流模式，此时如果频繁触发 `run` 或者 `runAsync`，则会以节流策略进行请求。
+
+```
+const { data, run } = useRequest(getUsername, {
+  throttleWait: 300,
+  manual: true
+});
+```
+
+示例代码，频繁触发 run，只会每隔 300ms 执行一次。
+
+## Options
+
+throttle 所有参数用法和效果同 lodash.throttle
+| 参数 | 说明 |
+|------------------|:--------------------------|
+| throttleWait | 节流等待时间, 单位为毫秒，设置后，进入节流模式。 |
+| throttleLeading | 在节流开始前执行调用。 |
+| throttleTrailing | 在节流结束后执行调用。 |
+
+**备注：**
+
+- `options.throttleWait`、`options.throttleLeading`、`options.throttleTrailing` 支持动态变化。
+- `runAsync` 在真正执行时，会返回 `Promise`。在未被执行时，不会有任何返回。
+- `cancel` 可以中止正在等待执行的函数。
+
+# 九、缓存&SWR
+
+如果设置了 `options.cacheKey`，`useRequest` 会将当前请求成功的数据缓存起来。下次组件初始化时，如果有缓存数据，我们会优先返回缓存数据，然后在背后发送新请求，也就是 `SWR` 的能力。
+
+可以通过 `options.staleTime` 设置数据保持最新时间，在该时间内，可以认为数据是最新的，不会重新发起请求。
+
+可以通过 `options.cacheTime` 设置数据缓存时间，超过该时间，我们会清空该条缓存数据。
+
+# 十、错误重试
+
+通过设置 `options.retryCount`，指定错误重试次数，则 useRequest 在失败后会进行重试。
+
+```
+import { useRequest } from 'ahooks';
+import React, { useState } from 'react';
+import { message } from 'antd';
+
+function editUsername(username: string) {
+  return new Promise((resolve, reject) => {
+    setTimeout(() => {
+      reject(new Error('Failed to modify username'));
+    }, 1000);
+  });
+}
+
+export default () => {
+  const [state, setState] = useState('');
+  const { loading, run } = useRequest(editUsername, {
+    retryCount: 3,
+    manual: true,
+    onError: (error) => {
+      message.error(error.message);
+    },
+  });
+
+  return (
+    <div>
+      <input
+        onChange={(e) => setState(e.target.value)}
+        value={state}
+        placeholder="Please enter username"
+        style={{ width: 240, marginRight: 16 }}
+      />
+      <button disabled={loading} type="button" onClick={() => run(state)}>
+        {loading ? 'Loading' : 'Edit'}
+      </button>
+    </div>
+  );
+};
+```
+
+如上示例代码，在请求异常后，会做 3 次重试。
+
+## Options
+
+| 参数            | 说明                                                                                                                |
+|---------------|:------------------------------------------------------------------------------------------------------------------|
+| retryCount    | 错误重试次数。如果设置为 -1，则无限次重试。                                                                                           |
+| retryInterval | 重试时间间隔，单位为毫秒。 <br/> 如果不设置，默认采用简易的指数退避算法，取 `1000 * 2 ** retryCount`，也就是第一次重试等待 2s，第二次重试等待 4s，以此类推，如果大于 30s，则取 30s。 |
+
+**备注：**
+
+- `options.retryCount`、`options.retryInterval` 支持动态变化。
+- `cancel` 可以中止正在等待执行的函数。

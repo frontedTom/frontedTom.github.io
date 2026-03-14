@@ -1,0 +1,126 @@
+.bg-blue-pink {
+  background: rgb(255, 201, 75);
+  background: linear-gradient(
+    280deg,
+    rgba(255, 201, 75, 1) 0%,
+    rgba(249, 166, 108) 40%,
+    rgba(241, 122, 126, 1) 100%
+  );
+}
+
+.bg-blue-pink:is(.dark *) {
+  background: rgb(249, 166, 108);
+  background: linear-gradient(
+    280deg,
+    rgba(249, 166, 108, 1) 0%,
+    rgba(249, 166, 108) 40%,
+    rgba(241, 122, 126, 1) 100%
+  );
+}
+
+.bg-pink-blue {
+  background: rgb(255, 201, 75);
+  background: linear-gradient(
+    100deg,
+    rgba(255, 201, 75) 0%,
+    rgba(249, 166, 108) 40%,
+    rgba(241, 122, 126, 1) 100%
+  );
+}
+
+.bg-pink-blue:is(.dark *) {
+  background: rgb(249, 166, 108);
+  background: linear-gradient(
+    100deg,
+    rgba(249, 166, 108) 0%,
+    rgba(249, 166, 108) 40%,
+    rgba(241, 122, 126, 1) 100%
+  );
+}
+
+.bg-gray-purple {
+  background: rgb(241, 122, 126);
+  background: linear-gradient(
+    258deg,
+    rgba(241, 122, 126, 1) 0%,
+    rgba(249, 166, 108, 1) 20%,
+    rgba(249, 166, 108, 1) 100%
+  );
+}
+
+.bg-gray-purple:is(.dark *) {
+  background: rgb(241, 122, 126);
+  background: linear-gradient(
+    258deg,
+    rgba(241, 122, 126, 1) 0%,
+    rgba(249, 166, 108, 1) 20%,
+    rgba(249, 166, 108, 1) 100%
+  );
+}
+
+/* Animation */
+.bg-pink-blue-animated {
+  background: linear-gradient(
+    90deg,
+    rgba(249, 166, 108, 1),
+    rgba(249, 166, 108, 1),
+    rgba(241, 122, 126, 1)
+  );
+  background-size: 400% 400%;
+  animation: bg-pink-blue-animated 6s ease infinite;
+}
+
+.bg-pink-blue-animated:is(.dark *) {
+  background: linear-gradient(
+    90deg,
+    rgba(249, 166, 108, 1),
+    rgba(249, 166, 108, 1),
+    rgba(241, 122, 126, 1)
+  );
+  background-size: 400% 400%;
+  animation: bg-pink-blue-animated 6s ease infinite;
+}
+
+@keyframes bg-pink-blue-animated {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+.animation-delay-1 {
+  animation-delay: 300ms !important;
+}
+
+.animation-delay-2 {
+  animation-delay: 600ms !important;
+}
+
+/* Text Colors */
+
+.text-primary {
+  @apply text-[#f17a7e];
+}
+
+.text-primary:is(.dark *) {
+  @apply text-[#f17a7e];
+}
+
+.text-white:is(.dark *) {
+  @apply text-black;
+}
+
+svg.text-white:hover,
+a .text-white:hover {
+  @apply text-[#f17a7e];
+}
+
+svg.text-white:hover:is(.dark *),
+a .text-white:hover:is(.dark *) {
+  @apply text-[#f17a7e];
+}

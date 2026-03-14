@@ -1,0 +1,215 @@
+---
+title: useRequest
+date: '2025-11-15'
+tags: ['React aHooks']
+draft: true
+summary: Observe whether the element is in the visible area, and the visible area ratio of the element. More information refer to Intersection Observer API.
+---
+
+# 一、基础用法
+
+监听元素是否在可见区域内
+
+```
+import React, { useRef } from 'react';
+import { useInViewport } from 'ahooks';
+
+export default () => {
+  const ref = useRef(null);
+  const [inViewport] = useInViewport(ref);
+  return (
+    <div>
+      <div style={{ width: 300, height: 300, overflow: 'scroll', border: '1px solid' }}>
+        scroll here
+        <div style={{ height: 800 }}>
+          <div
+            ref={ref}
+            style={{
+              border: '1px solid',
+              height: 100,
+              width: 100,
+              textAlign: 'center',
+              marginTop: 80,
+            }}
+          >
+            observer dom
+          </div>
+        </div>
+      </div>
+      <div style={{ marginTop: 16, color: inViewport ? '#87d068' : '#f50' }}>
+        inViewport: {inViewport ? 'visible' : 'hidden'}
+      </div>
+    </div>
+  );
+};
+```
+
+# 二、监听元素可见区域比例
+
+传入 options.threshold, 可以控制在可见区域达到该比例时触发 ratio 更新。
+options.root 可以控制相对父级元素，在这个例子中，不会相对浏览器视窗变化。
+
+```
+import React from 'react';
+import { useInViewport } from 'ahooks';
+
+export default () => {
+  const [inViewport, ratio] = useInViewport(() => document.getElementById('children'), {
+    threshold: [0, 0.25, 0.5, 0.75, 1],
+    root: () => document.getElementById('parent'),
+  });
+  return (
+    <div>
+      <div style={{ width: 300, height: 300, overflow: 'scroll', border: '1px solid' }} id="parent">
+        scroll here
+        <div style={{ height: 800 }}>
+          <div
+            id="children"
+            style={{
+              border: '1px solid',
+              height: 100,
+              width: 100,
+              textAlign: 'center',
+              marginTop: 80,
+            }}
+          >
+            observer dom
+          </div>
+        </div>
+      </div>
+      <div style={{ marginTop: 16, color: inViewport ? '#87d068' : '#f50' }}>
+        <p>inViewport: {inViewport ? 'visible' : 'hidden'}</p>
+        <p>ratio: {ratio}</p>
+      </div>
+    </div>
+  );
+};
+```
+
+# 三、监听内容滚动选中菜单
+
+传入 callback, 使得 IntersectionObserver 的回调被调用时，用户可以做一些自定义操作。
+
+```
+import { useInViewport, useMemoizedFn } from 'ahooks';
+import React, { useRef, useState } from 'react';
+
+const menus = ['menu-1', 'menu-2', 'menu-3'];
+const content = {
+  'menu-1': 'Content for menus 1',
+  'menu-2': 'Content for menus 2',
+  'menu-3': 'Content for menus 3',
+};
+
+export default () => {
+  const menuRef = useRef<HTMLDivElement[]>([]);
+
+  const [activeMenu, setActiveMenu] = useState(menus[0]);
+
+  const callback = useMemoizedFn((entry) => {
+    if (entry.isIntersecting) {
+      const active = entry.target.getAttribute('id') || '';
+      setActiveMenu(active);
+    }
+  });
+
+  const handleMenuClick = (index) => {
+    const contentEl = document.getElementById('content-scroll');
+    const top = menuRef.current[index]?.offsetTop;
+
+    contentEl?.scrollTo({
+      top,
+      behavior: 'smooth',
+    });
+  };
+
+  useInViewport(menuRef.current, {
+    callback,
+    root: () => document.getElementById('parent-scroll'),
+    rootMargin: '-50% 0px -50% 0px',
+  });
+
+  return (
+    <div
+      id="parent-scroll"
+      style={{ width: 300, height: 300, border: '1px solid', display: 'flex', overflow: 'hidden' }}
+    >
+      <div style={{ width: '30%', backgroundColor: '#f0f0f0' }}>
+        <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+          {menus.map((menu, index) => (
+            <li
+              key={menu}
+              onClick={() => handleMenuClick(index)}
+              style={{
+                padding: '10px',
+                cursor: 'pointer',
+                textAlign: 'center',
+                transition: 'background-color 0.2s ease-in-out',
+                backgroundColor: activeMenu === menu ? '#e0e0e0' : '',
+              }}
+            >
+              {menu}
+            </li>
+          ))}
+        </ul>
+      </div>
+      <div id="content-scroll" style={{ flex: 1, overflowY: 'scroll', position: 'relative' }}>
+        {menus.map((menu, index) => (
+          <div
+            ref={(el: HTMLDivElement) => {
+              menuRef.current[index] = el;
+            }}
+            key={menu}
+            id={menu}
+            style={{
+              display: 'flex',
+              justifyContent: 'center',
+              alignItems: 'center',
+              height: '100%',
+              fontSize: 16,
+            }}
+          >
+            {content[menu]}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+```
+
+## API
+
+```
+type Target = Element | (() => Element) | React.MutableRefObject<Element>;
+
+const [inViewport, ratio] = useInViewport(
+  target: Target | Target[],
+  options?: Options
+);
+```
+
+## Params
+
+| 参数    | 说明                         |
+| ------- | :--------------------------- |
+| target  | DOM 节点或者 Ref，支持数组。 |
+| options | 设置                         |
+
+## Options
+
+| 参数       | 说明                                                                                                          |
+| ---------- | :------------------------------------------------------------------------------------------------------------ |
+| threshold  | 可以是单一的 number 也可以是 number 数组，target 元素和 root 元素相交程度达到该值的时候 ratio 会被更新 。     |
+| rootMargin | 根(root)元素的外边距                                                                                          |
+| root       | 指定根(root)元素，用于检查目标的可见性。必须是目标元素的父级元素，如果未指定或者为 null，则默认为浏览器视窗。 |
+| callback   | IntersectionObserver 的回调被调用时触发                                                                       |
+
+## Result
+
+| 参数       | 说明                                                      |
+| ---------- | :-------------------------------------------------------- |
+| inViewport | 是否可见                                                  |
+| ratio      | 当前可见比例，在每次到达 options.threshold 设置节点时更新 |
+
+---

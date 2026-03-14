@@ -1,0 +1,22 @@
+{
+  "typed": {
+    "Iam": "I'm",
+    "Iam-a": "I'm a",
+    "alias": {
+      "1": "CodeTom"
+    },
+    "text1": "Front-end development engineer",
+    "text2": "Web 3.0 follower",
+    "text3": "Detective mystery enthusiast",
+    "text4": "INFJ",
+    "text5": "Collector of beautiful things"
+  },
+  "overview": {
+    "desc": {
+      "1": "Welcome, this is CodeTom.",
+      "2": "I come from Hebei and now work in Nanjing.",
+      "3": "I like to make up some rare things and record my life, hobbies and travel here.",
+      "4": "Welcome to understand me!"
+    }
+  }
+}
