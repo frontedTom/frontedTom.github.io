@@ -35,8 +35,8 @@ export default function DashBoard() {
           <SearchBox />
         </div>
       </div>
-      <ResponsiveBox />
       <ScrollTagsBox />
+      <ResponsiveBox />
     </div>
   )
 }

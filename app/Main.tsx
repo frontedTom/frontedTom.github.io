@@ -6,12 +6,12 @@ export default function Home() {
   return (
     <div className="space-y-10 divide-y divide-gray-200 dark:divide-gray-700">
       <DashBoard />
-      <RecentPosts />
       {siteMetadata.newsletter?.provider && (
         <div className="flex items-center justify-center pt-4">
           <NewsletterForm />
         </div>
       )}
+      <RecentPosts />
     </div>
   )
 }
